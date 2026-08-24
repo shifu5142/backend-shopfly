@@ -1,0 +1,104 @@
+# השם של הפעילות
+name: API CI/CD NestJS
+
+# מה שיקרה בפעילות זו
+on:
+  workflow_dispatch: # יופעל באופן ידני
+    # push: # יופעל באופן אוטומטי כאשר יובאו שינויים להעתקה הראשית
+    # pull_request: # יופעל באופן אוטומטי כאשר יובאו שינויים להעתקה הראשית
+    # לאיזה סטמפים יופעל הפעילות זו
+    branches:
+      - main
+
+# מה שיקרה בפעילות זו
+jobs:
+  co: מבנה המשימות
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4  
+        with:
+          node-version: '14'
+      - name: Install dependencies
+        run: npm install
+        working-directory: ./src
+        name npm audit 
+        run: npm audit --audit-level=high
+  deploy:
+  # אורגניזציה לפרויקט  
+    runs-on: ubuntu-latest
+    # מאפשר לפרויקט לקרוא ולכתוב במאגר הקוד
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Setup Node.js
+      # נותן לפעילות זו לקרוא ולכתוב במאגר הקוד
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Install dependencies
+        run: npm install
+        working-directory: ./src
+        # login to ECR
+        name: Login to ECR
+        run: aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ECR_REPOSITORY }}
+        # build the Docker image  
+        NAME: Build the Docker image
+        run: docker build --no-cache -t shifu5142/shopfly:latest .
+        # tag the Docker image
+        name: Tag the Docker image
+        run: docker tag shifu5142/shopfly:latest ${{ secrets.ECR_REPOSITORY }}:latest
+        # push the Docker image to ECR
+        name: Push the Docker image to ECR
+        run: docker push ${{ secrets.ECR_REPOSITORY }}:latest
+        # EC2
+        name: ECR repository name
+        uses: actions/aws-ec2-instance-connect-chat@v1
+        with:
+          host: ${{ secrets.EC2_INSTANCE_HOST }}
+          username: ${{ secrets.EC2_INSTANCE_USERNAME }}
+          key: ${{ secrets.EC2_key}}
+          script: |
+             docker pull ${{ secrets.ECR_REPOSITORY }}:latest
+             docker stop shifu5142/shopfly:latest || true
+             docker rm shifu5142/shopfly:latest || true
+             secrets_json=$(aws secretsmanager get-secret-value \
+             --secret-id shopfly/production/jwt \
+             --query SecretString \
+             --output text)
+
+             export DATABASE_USER=$(echo $secrets_json | jq -r '.database_user')
+             export DATABASE_PASSWORD=$(echo $secrets_json | jq -r '.database_password')
+             export DATABASE_NAME=$(echo $secrets_json | jq -r '.database_name')
+             export DATABASE_HOST=$(echo $secrets_json | jq -r '.database_host')
+             export DATABASE_PORT=$(echo $secrets_json | jq -r '.database_port')
+             export DATABASE_URL=$(echo $secrets_json | jq -r '.database_url')
+             export PORT=$(echo $secrets_json | jq -r '.port')
+             export ALLOWED_ORIGINS=$(echo $secrets_json | jq -r '.allowed_origins')
+             export JWT_SECRET=$(echo $secrets_json | jq -r '.jwt_secret')
+             export JWT_EXPIRATION_TIME=$(echo $secrets_json | jq -r '.jwt_expiration_time')
+             export JWT_REFRESH_SECRET=$(echo $secrets_json | jq -r '.jwt_refresh_secret')
+
+             docker run -d \
+             -p $PORT:$PORT \
+             --name shifu5142/shopfly:latest \
+             -e DATABASE_USER=$DATABASE_USER \
+             -e DATABASE_PASSWORD=$DATABASE_PASSWORD \
+             -e DATABASE_NAME=$DATABASE_NAME \
+             -e DATABASE_HOST=$DATABASE_HOST \
+             -e DATABASE_PORT=$DATABASE_PORT \
+             -e DATABASE_URL=$DATABASE_URL \
+             -e PORT=$PORT \
+             -e ALLOWED_ORIGINS=$ALLOWED_ORIGINS \
+             -e JWT_SECRET=$JWT_SECRET \
+             -e JWT_EXPIRATION_TIME=$JWT_EXPIRATION_TIME \
+             -e JWT_REFRESH_SECRET=$JWT_REFRESH_SECRET \
+             shifu5142/shopfly:latest
+             ${{ secrets.ECR_INSTANCE_HOST }}

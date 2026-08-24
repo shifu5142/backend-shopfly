@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  shopfly:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      container_name: shopfly
+    ports:
+      - ${PORT}:3000
+    environment:
+      database_user: ${DATABASE_USER}
+      database_password: ${DATABASE_PASSWORD}
+      database_name: ${DATABASE_NAME}
+      database_host: ${DATABASE_HOST}
+      port: ${PORT}
+      allowed_origins: ${ALLOWED_ORIGINS}
+      jwt_secret: ${JWT_SECRET}
+      jwt_expires_in: ${JWT_EXPIRES_IN}
+      jwt_refresh_secret: ${JWT_REFRESH_SECRET}
+      jwt_refresh_expires_in: ${JWT_REFRESH_EXPIRES_IN}
+      next_pubic_strip_public_key: ${NEXT_PUBLIC_STRIP_PUBLIC_KEY}
+      strip_secret_key: ${STRIP_SECRET_KEY}
+  resturt:useless-stopped
